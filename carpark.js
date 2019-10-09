@@ -68,7 +68,7 @@ function respond( res, data ){
 
 // should update this to use SSL/TLS, but don't have a means to create certs right now
 const address = process.env.hostname || '0.0.0.0';
-createServer( async( req, res ) => {
+createServer(( req, res ) => {
 
   // default web server logic -- get our static file target
   if( !/^\/api\/i.test( req.path )){
@@ -92,7 +92,7 @@ createServer( async( req, res ) => {
     req.on('data', d => body += d.toString() );
 
     // handle the desired operation
-    req.on('end', () => {
+    req.on('end', async () => {
       const vehicle = body.length >= 2 ? JSON.parse( body ) : {};
 
       // determine what to do

@@ -1,6 +1,7 @@
 const { MongoClient, ObjectID } = require('mongodb');
 const { createServer } = require('http');
 const { readFile } = require('fs');
+const { resolve, extname } = require('path');
 
 // Connects to the configured mongoDB server, runs an operation, then disconnects.  Returns the results.
 async function query( op ){
@@ -66,16 +67,35 @@ function respond( res, data ){
   res.end({ message: 'OK', data });
 }
 
+// Lazy MIME resolver for basic types.
+function getMime( path ){
+  switch( extname( path )){
+    case '.htm':
+    case '.html':
+      return 'text/html';
+    case '.css':
+      return 'text/css';
+    case '.js':
+    case '.mjs':
+      return 'text/javascript';
+    case '.json':
+      return 'application/json';
+    // TODO other types ...
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 // should update this to use SSL/TLS, but don't have a means to create certs right now
 const address = process.env.hostname || '0.0.0.0';
 createServer(( req, res ) => {
 
   // default web server logic -- get our static file target
   if( !/^\/api\/i.test( req.path )){
-    const target = !/\.[^\/]+$/.test( req.path ) ? `${req.path}index.html` : req.path;
+    const target = !/\.[^\/]+$/.test( req.path ) ? resolve( req.path, 'index.html') : req.path;
     return readFile( target, ( err, data ) => {
       if( err ){
-        res.writeHead( 400, { 'Content-Type': 'text/plain' });
+        res.writeHead( 404, { 'Content-Type': 'text/plain' });
         return res.end('File Not Found');
       }
 
@@ -128,9 +148,7 @@ createServer(( req, res ) => {
     });
   } catch( err ){
     console.error( err );
-
-    // write out
-    res.writeHead( 500, { 'Content-Type': 'text/plain' });
-    res.end('Internal Server Error');
+    res.writeHead( 500, { 'Content-Type': 'application/json' });
+    res.end({ message: 'Internal Server Error' });  // TODO consider a reason
   }
 }).listen( process.env.port || 8080, address );

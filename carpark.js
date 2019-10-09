@@ -4,6 +4,10 @@ const { readFile } = require('fs');
 
 // Connects to the configured mongoDB server, runs an operation, then disconnects.  Returns the results.
 async function query( op ){
+  if( !op )
+    return undefined;
+
+  // connect
   const client = new MongoClient( process.env.mongodb || 'mongodb://localhost:27017');
   const conn = await client.connect();
 

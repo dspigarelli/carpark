@@ -46,6 +46,11 @@ async function find( license, limit = 1 ){
   return query((, cars ) => cars.find({ license, departure: null }).limit( limit ).toArray() );
 }
 
+// Find all vehicles that have yet to depart.
+async function listAllParked(){
+  return query((, cars ) => cars.find({ departure: null }).toArray() );
+}
+
 // Compute the charge for parking.
 function computeCharge( seconds ){
   return ( seconds / 3600 ) * ( process.env.rate || 7.50 );
@@ -144,6 +149,12 @@ createServer(( req, res ) => {
             return notAllowed( res );
           const hits = await find( vehicle.license );
           return respond( res, { parked: hits.length >= 1 });
+
+        // list everyone who's currently parked
+        case 'occupancy':
+          if( req.method !== 'GET')
+            return notAllowed( res );
+          return respond( res, await listAllParked());
       }
     });
   } catch( err ){

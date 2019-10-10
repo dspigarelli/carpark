@@ -34,16 +34,19 @@ async function inbound( license, arrival = new Date() ){
 }
 
 // Update the departure of a vehicle.  Returns the total time, in seconds, that it was parked in the garage.
-async function outbound( id, departure = new Date() ){
+async function outbound( id, license, departure = new Date() ){
   return query( async (, cars ) => {
-    const record = await cars.findOneAndUpdate({ _id: new ObjectID( id ) }, { $set: { departure }});
+    const record = await cars.findOneAndUpdate({ _id: new ObjectID( id ), license }, { $set: { departure }});
     return ( departure.getTime() - record.arrival.getTime() ) * 1000;
   });
 }
 
 // Check for vehicle presence.  Returns the record(s) found, if any.
-async function find( license, limit = 1 ){
-  return query((, cars ) => cars.find({ license, departure: null }).limit( limit ).toArray() );
+async function find( license, id = null, limit = 1 ){
+  let record = { license, departure: null };
+  if( id )
+    Object.assign( record, { _id: new ObjectID( id ) });
+  return query((, cars ) => cars.find( record ).limit( limit ).toArray() );
 }
 
 // Find all vehicles that have yet to depart.
@@ -134,20 +137,20 @@ createServer(( req, res ) => {
         case 'outbound':
           if( req.method !== 'POST')
             return notAllowed( res );
-          const time = await outbound( vehicle.recordID );
-          return respond( res, { fee: computeCharge( time ) });
+          const time = await outbound( vehicle.recordID, vehicle.license, vehicle.departure || new Date() );
+          return respond( res, { fee: computeCharge( time ), time });
 
         // we need to determine the charge for how long they parked
         case 'fee':
-          if( req.method !== 'GET')
+          if( req.method !== 'PUT')
             return notAllowed( res );
-          return respond( res, computeCharge( vehicle.timeParked ));
+          return respond( res, { fee: computeCharge( vehicle.timeParked ) });
 
         // we want to know if someone is still parked here
         case 'parked':
-          if( req.method !== 'GET')
+          if( req.method !== 'PUT')
             return notAllowed( res );
-          const hits = await find( vehicle.license );
+          const hits = await find( vehicle.license, vehicle.recordID );
           return respond( res, { parked: hits.length >= 1 });
 
         // list everyone who's currently parked

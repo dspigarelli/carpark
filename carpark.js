@@ -2,6 +2,7 @@ const { MongoClient, ObjectID } = require('mongodb');
 const { createServer } = require('http');
 const { readFile } = require('fs');
 const { resolve, extname } = require('path');
+const assert = require('assert');
 
 // Connects to the configured mongoDB server, runs an operation, then disconnects.  Returns the results.
 async function query( op ){
@@ -27,7 +28,7 @@ async function query( op ){
 // Register a new vehicle, by its licence plate.  This tracks when the vehicle entered the system.  Returns the Mongo
 // ObjectID for the newly created record; this is used for handling outbound updates.
 async function inbound( license, arrival = new Date() ){
-  return query( async (, cars ) => {
+  return query( async (_, cars ) => {
     const record = await cars.insert({ license, arrival, departure: null });
     return record.insertedId;
   });
@@ -35,9 +36,9 @@ async function inbound( license, arrival = new Date() ){
 
 // Update the departure of a vehicle.  Returns the total time, in seconds, that it was parked in the garage.
 async function outbound( id, license, departure = new Date() ){
-  return query( async (, cars ) => {
+  return query( async (_, cars ) => {
     const record = await cars.findOneAndUpdate({ _id: new ObjectID( id ), license }, { $set: { departure }});
-    return ( departure.getTime() - record.arrival.getTime() ) * 1000;
+    return ( new Date(departure).getTime() - new Date(record.value.arrival).getTime() ) * 1000;
   });
 }
 
@@ -46,12 +47,12 @@ async function find( license, id = null, limit = 1 ){
   let record = { license, departure: null };
   if( id )
     Object.assign( record, { _id: new ObjectID( id ) });
-  return query((, cars ) => cars.find( record ).limit( limit ).toArray() );
+  return query((_, cars ) => cars.find( record ).limit( limit ).toArray() );
 }
 
 // Find all vehicles that have yet to depart.
 async function listAllParked(){
-  return query((, cars ) => cars.find({ departure: null }).toArray() );
+  return query((_, cars ) => cars.find({ departure: null }).toArray() );
 }
 
 // Compute the charge for parking.
@@ -60,19 +61,19 @@ function computeCharge( seconds ){
 }
 
 // Respond with a Not Allowed.
-function notAllowed( res ){
+function notAllowed( res, req ){
   res.writeHead( 405, { 'Content-Type': 'application/json' });
-  res.end({
+  res.end(JSON.stringify({
     message: 'Method Not Allowed',
     expected: assert,
     received: req.method
-  });
+  }));
 }
 
 // Respond to API requests.
 function respond( res, data ){
   res.writeHead( 200, { 'Content-Type': 'application/json' });
-  res.end({ message: 'OK', data });
+  res.end(JSON.stringify({ message: 'OK', data }));
 }
 
 // Lazy MIME resolver for basic types.
@@ -99,8 +100,8 @@ const address = process.env.hostname || '0.0.0.0';
 createServer(( req, res ) => {
 
   // default web server logic -- get our static file target
-  if( !/^\/api\/i.test( req.path )){
-    const target = !/\.[^\/]+$/.test( req.path ) ? resolve( req.path, 'index.html') : req.path;
+  if( !/^\/api\//i.test( req.url )){
+    const target = !/\.[^\/]+$/.test( req.url ) ? resolve( req.url, 'index.html') : req.url;
     return readFile( target, ( err, data ) => {
       if( err ){
         res.writeHead( 404, { 'Content-Type': 'text/plain' });
@@ -121,48 +122,52 @@ createServer(( req, res ) => {
 
     // handle the desired operation
     req.on('end', async () => {
+      try {
       const vehicle = body.length >= 2 ? JSON.parse( body ) : {};
 
       // determine what to do
-      const func = req.path.match( /\/api\/(.+?)\?/i )[1];
+      const func = req.url.match( /\/api\/(.+?)\?/i )[1];
       switch( func ){
 
         // a new vehicle has arrived
         case 'inbound':
           if( req.method !== 'POST')
-            return notAllowed( res );
-          return respond( res, await inbound( vehicle.license, vehicle.arrival || new Date() ));
+            return notAllowed( res, req );
+          return respond( res, await inbound( vehicle.license, vehicle.arrival || new Date()) );
 
         // a vehicle has left, get the fee
         case 'outbound':
           if( req.method !== 'POST')
-            return notAllowed( res );
+            return notAllowed( res, req );
           const time = await outbound( vehicle.recordID, vehicle.license, vehicle.departure || new Date() );
           return respond( res, { fee: computeCharge( time ), time });
 
         // we need to determine the charge for how long they parked
         case 'fee':
           if( req.method !== 'PUT')
-            return notAllowed( res );
+            return notAllowed( res, req );
           return respond( res, { fee: computeCharge( vehicle.timeParked ) });
 
         // we want to know if someone is still parked here
         case 'parked':
           if( req.method !== 'PUT')
-            return notAllowed( res );
+            return notAllowed( res, req );
           const hits = await find( vehicle.license, vehicle.recordID );
           return respond( res, { parked: hits.length >= 1 });
 
         // list everyone who's currently parked
         case 'occupancy':
           if( req.method !== 'GET')
-            return notAllowed( res );
+            return notAllowed( res, req );
           return respond( res, await listAllParked());
       }
+    } catch (err) {
+      debugger;
+    }
     });
   } catch( err ){
     console.error( err );
     res.writeHead( 500, { 'Content-Type': 'application/json' });
-    res.end({ message: 'Internal Server Error' });  // TODO consider a reason
+    res.end(JSON.stringify({ message: 'Internal Server Error' }));  // TODO consider a reason
   }
-}).listen( process.env.port || 8080, address );
+}).listen( process.env.port || 8081, address );

@@ -1,0 +1,19 @@
+{
+  "name": "carpark",
+  "version": "1.0.0",
+  "description": "carpark =======",
+  "scripts": {
+    "start": "node ./carpark.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fdrgn/carpark.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fdrgn/carpark/issues"
+  },
+  "homepage": "https://github.com/fdrgn/carpark#readme",
+  "dependencies": {
+    "mongodb": "^3.3.2"
+  }
+}

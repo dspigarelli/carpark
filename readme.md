@@ -125,3 +125,15 @@ Returns either `true` or `false` for the data value.
 The `occupancy` function will list *all* vehicles which *have not* departed.  It takes no parameters.
 
 The response returns an array of vehicle records.
+
+# Setup
+
+## Prerequisites:
+- docker
+- docker-compose
+
+## Setup
+- `docker-compose up -d mongo`
+- `npm install`
+- `npm start`
+
